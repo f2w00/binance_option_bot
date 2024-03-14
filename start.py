@@ -1,7 +1,7 @@
 import json
 import time
 import logging
-from binance_interface.api import EO
+from binance_interface.api import EO, PM
 from flask import Flask, request
 
 # 打开配置json文件
@@ -26,6 +26,7 @@ def log_to_txt(flag, text, **params):
 class BinanceClient(object):
 
     client = EO(setting_dict['binance_key'], setting_dict['binance_secret'])
+    account = PM(setting_dict['binance_key'], setting_dict['binance_secret'])
     # 记录下单的id,状态,次数,如果当天次数过多不允许下单并且邮件汇报
     pyramid_dict = {
         'long': {'orderId': [], 'status': 0, 'freq': 0},
@@ -120,13 +121,8 @@ class BinanceClient(object):
                                                                               timeInForce = timeinforce,
                                                                               price = price_input)
                 else:
-                    BinanceClient.client.accountTrade.cancel_order(symbol = symbol_input,
-                                                                   orderId =
-                                                                   BinanceClient.pyramid_dict[
-                                                                       'short'][
-                                                                       'orderId'][-1])
-                    BinanceClient.pyramid_dict['short']['orderId'].pop()
-                    BinanceClient.pyramid_dict['short']['status'] -= 1
+                    BinanceClient.close_order(symbol_input, BinanceClient.pyramid_dict[
+                        'short']['orderId'][-1])
                     order_reply = BinanceClient.client.accountTrade.set_order(symbol =
                                                                               symbol_input,
                                                                               side = side,
@@ -168,6 +164,14 @@ class BinanceClient(object):
         except Exception as e:
             log_to_txt(0, str(e))
 
+    @staticmethod
+    def get_account_info():
+        try:
+            return BinanceClient.account.account.get_account()
+        except Exception as e:
+            print(e)
+            log_to_txt(1, str(e))
+
 
 # flask setting
 app = Flask(__name__)
@@ -175,21 +179,44 @@ print('running server from now on ' + time.strftime("%Y-%m-%d %H:%M:%S",
                                                     time.localtime()))
 
 
-@app.post('/buy')
-def route_to_order():
-    """
-    @return:
-    """
+@app.post('/open')
+def route_open_order():
     try:
         symbol = request.json['symbol']
         side = request.json['side']
         type_input = request.json['type']
         quantity = request.json['quantity']
         price = request.json['price']
-        clientOrderId = request.json
         BinanceClient.open_order(symbol, side, type_input, quantity, price)
+        BinanceClient.open_order(symbol, 'sell' if side == 'buy' else 'buy', type_input,
+                                 quantity, price)
     except Exception as e:
         log_to_txt(1, str(e))
+
+
+@app.route('/close')
+def route_close_order():
+    try:
+        symbol = request.json['symbol']
+        side = request.json['side']
+        BinanceClient.close_order(symbol, BinanceClient.pyramid_dict[side]['orderId'][-1])
+        # BinanceClient.close_order()
+    except Exception as e:
+        log_to_txt(1, str(e))
+
+
+@app.get('/account_info')
+def route_get_account():
+    try:
+        return BinanceClient.get_account_info()
+    except Exception as e:
+        print(e)
+        log_to_txt(1, str(e))
+
+
+@app.route('/nice')
+def route_nice():
+    return 'Nice to meet you!'
 
 
 if __name__ == '__main__':

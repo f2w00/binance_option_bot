@@ -1,3 +1,3 @@
 workers = 1
-worker_class = "gevent"
-bind = "0.0.0.0:8012"
+worker_class = "sync"
+bind = "127.0.0.1:8012"
