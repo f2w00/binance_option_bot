@@ -1,0 +1,6 @@
+{
+  "binance_key": "key",
+  "binance_secret": "secret",
+  "most_freq": 10,
+  "pyramid": 1
+}
