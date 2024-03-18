@@ -1,12 +1,13 @@
 import datetime
 import json
+import math
 import time
 import logging
 import traceback
 
 from binance_interface.api import EO, PM
 from flask import Flask, request
-
+# todo 确认账户开通,确认tv参数发送正确
 # 打开配置json文件
 with open("settings.json", 'r', encoding = 'UTF-8') as f:
     setting_dict = json.load(f)
@@ -47,10 +48,22 @@ class BinanceInterface(object):
     def account_info():
         return BinanceInterface.client.accountTrade.get_account()
 
+    @staticmethod
+    def account_info():
+        return BinanceInterface.client.accountTrade.get_account()['asset'][0][
+            'marginBalance']
+
+    @staticmethod
+    def exchange_info():
+        return BinanceInterface.client.market.get_exchangeInfo()
+
+    @staticmethod
+    def mark_price(symbol):
+        return BinanceInterface.client.market.get_mark(symbol)[0]['markPrice']
+
 
 # 设置币安
 class OrderClient(object):
-
 
     # 记录下单的id,状态,次数,如果当天次数过多不允许下单并且邮件汇报
     pyramid_dict = {
@@ -67,10 +80,13 @@ class OrderClient(object):
             'date': datetime.date.today().day
         }
     }
-
+    client = None
+    match setting_dict['broker']:
+        case 'binance':
+            client = BinanceInterface
 
     @staticmethod
-    def open_order(broker, symbol_input,
+    def open_order(symbol_input,
                    side,
                    type_input,
                    quantity,
@@ -81,9 +97,8 @@ class OrderClient(object):
             * 限制开单频率,通过freq和date来确定是否是同一天交易的,同样在settings.json中设置,
                 * 每次开单都会增加freq并检查date
                 * 每次关闭订单并不会减少freq,只有在日期(日)和上一次的不同之后才会刷新freq
-            @param broker: 确认交易所例如binance,可以切换交易所
             @param symbol_input:用来确认交易对,例如BTCUSDT
-            @param side:确认方向,buy和sell
+            @param side:确认方向,SELL和PUT
             @param type_input:订单类型,limit
             @param quantity:下单数量
             @param price_input: 委托价格(目标达到价格)
@@ -91,29 +106,25 @@ class OrderClient(object):
         """
         try:
             order_reply = None
-            direction = 'long' if side == 'buy' else 'short'
-            client = None
-            match broker:
-                case 'binance':
-                    client = BinanceInterface
+            direction = 'long' if side == 'SELL' else 'short'
             if OrderClient.pyramid_dict[direction]['status'] < setting_dict['pyramid']:
-                order_reply = client.open_order(symbol_input,
-                                                side,
-                                                type_input,
-                                                quantity,
-                                                price_input,
-                                                timeinforce)
+                order_reply = OrderClient.client.open_order(symbol_input,
+                                                            side,
+                                                            type_input,
+                                                            quantity,
+                                                            price_input,
+                                                            timeinforce)
             else:
-                client.cancel_order(symbol_input = symbol_input,
-                                    orderId = OrderClient.pyramid_dict[
-                                        direction]['orderId'][
-                                        -1])
-                order_reply = client.open_order(symbol_input,
-                                                side,
-                                                type_input,
-                                                quantity,
-                                                price_input,
-                                                timeinforce)
+                OrderClient.client.cancel_order(symbol_input = symbol_input,
+                                                orderId = OrderClient.pyramid_dict[
+                                                    direction]['orderId'][
+                                                    -1])
+                order_reply = OrderClient.client.open_order(symbol_input,
+                                                            side,
+                                                            type_input,
+                                                            quantity,
+                                                            price_input,
+                                                            timeinforce)
 
             # 添加记录
             OrderClient.pyramid_dict[direction]['orderId'].append(
@@ -144,13 +155,10 @@ class OrderClient(object):
                 }))
 
     @staticmethod
-    def close_order(broker, symbol_input, order_id):
+    def close_order(symbol_input, order_id):
         try:
-            client = None
-            match broker:
-                case 'binance':
-                    client = BinanceInterface
-            client.cancel_order(symbol_input = symbol_input, orderId = order_id)
+            OrderClient.client.cancel_order(symbol_input = symbol_input,
+                                            orderId = order_id)
             if order_id in OrderClient.pyramid_dict['short']['orderId']:
                 OrderClient.pyramid_dict['short']['status'] -= 1
                 OrderClient.pyramid_dict['short']['orderId'].remove(order_id)
@@ -161,13 +169,30 @@ class OrderClient(object):
             log_to_txt(0, str(traceback.format_exc()))
 
     @staticmethod
-    def get_account_info(broker):
+    def get_account_info():
         try:
-            client = None
-            match broker:
-                case 'binance':
-                    client = BinanceInterface
-            return client.account_info()
+            return OrderClient.client.account_info()
+        except Exception as e:
+            log_to_txt(1, str(traceback.format_exc()))
+
+    @staticmethod
+    def get_exchange_info(symbol):
+        try:
+            return OrderClient.client.exchange_info(symbol)
+        except Exception as e:
+            log_to_txt(1, str(traceback.format_exc()))
+
+    @staticmethod
+    def get_account_margin():
+        try:
+            return OrderClient.client.get_account_margin()
+        except Exception as e:
+            log_to_txt(1, str(traceback.format_exc()))
+
+    @staticmethod
+    def get_mark_price(symbol):
+        try:
+            return OrderClient.client.mark_price(symbol)
         except Exception as e:
             log_to_txt(1, str(traceback.format_exc()))
 
@@ -182,44 +207,61 @@ print('running server from now on ' + time.strftime("%Y-%m-%d %H:%M:%S",
 def route_open_order():
     try:
         params = json.loads(request.data)
-        log_to_txt(1, str(params))
         if params['target'] == 'OPEN':
-            broker = params['broker']
             symbol = params['symbol']
             side = params['side']
             price = params['price']
             price_other_side = params['price_other_side']
             # todo 确认quantity
-            quantity = int(
-                OrderClient.get_account_info(broker)['asset'][0]['marginBalance'] / 10)
-            OrderClient.open_order(broker, symbol, side, 'LIMIT', quantity, price)
-            OrderClient.open_order(broker,
-                                   symbol,
-                                   'SELL' if side == 'BUY' else 'BUY',
-                                   'LIMIT',
-                                   quantity,
-                                   price_other_side)
+            quantity = 0.01
+            # quantity=math.floor(((OrderClient.get_account_info())*setting_dict[
+            # 'order_rate']/OrderClient.get_mark_price(
+            # symbol))*100)/100
+            OrderClient.open_order(symbol, side, 'LIMIT', quantity, price)
+            OrderClient.open_order(
+                symbol,
+                'BUY' if side == 'SELL' else 'SELL',
+                'LIMIT',
+                quantity,
+                price_other_side)
         if params['target'] == 'CLOSE':
-            broker = params['broker']
             symbol = params['symbol']
             side = params['side']
-            direction = 'long' if side == 'BUY' else 'short'
-            OrderClient.close_order(broker,
-                                    symbol,
-                                    OrderClient.pyramid_dict[direction]['orderId'][-1])
+            direction = 'long' if side == 'SELL' else 'short'
+            OrderClient.close_order(
+                symbol,
+                OrderClient.pyramid_dict[direction]['orderId'][-1])
     except Exception as e:
         log_to_txt(1, str(traceback.format_exc()))
     finally:
         log_to_txt(0, str(OrderClient.pyramid_dict))
         return 'success'
 
+
 @app.get('/account_info')
 def route_get_account():
     try:
-        print(request.args['broker'])
-        return OrderClient.get_account_info(request.args['broker'])
+        return OrderClient.get_account_info()
     except Exception as e:
-        log_to_txt(1, str(e))
+        print(str(traceback.format_exc()))
+        log_to_txt(1, str(traceback.format_exc()))
+
+
+@app.get('/exchange_info')
+def route_get_exchange_info():
+    try:
+        return OrderClient.get_exchange_info()
+    except Exception as e:
+        print(str(traceback.format_exc()))
+        log_to_txt(1, str(traceback.format_exc()))
+
+
+@app.get('/mark_price')
+def route_mark_price():
+    try:
+        return OrderClient.get_mark_price(request.args.get('symbol'))
+    except Exception as e:
+        log_to_txt(1, str(traceback.format_exc()))
 
 
 @app.route('/nice')
