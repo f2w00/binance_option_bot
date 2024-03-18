@@ -1,5 +1,6 @@
 import datetime
 import json
+import time
 
 from binance_interface.api import EO
 
@@ -33,16 +34,38 @@ class BinanceInterface(object):
         return BinanceInterface.client.accountTrade.get_account()
 
     @staticmethod
-    def account_margin():
-        return BinanceInterface.client.accountTrade.get_account()['asset'][0][
-            'marginBalance']
+    def account_margin(asset='USDT'):
+        response=BinanceInterface.client.accountTrade.get_account()['data']['asset']
+        available=0
+        for i in response:
+            if i['asset'] == asset:
+                available=i['available']
+                break
+        return float(available)
 
     @staticmethod
-    def exchange_info():
-        return BinanceInterface.client.market.get_exchangeInfo()
+    def exchange_info(base_filter=2,side_filter='CALL',date_filter=2,minQty_filter='0.01'):
+        now_time=int(time.time() * 1000)
+        request_result=BinanceInterface.client.market.get_exchangeInfo()
+        def filter_my(x):
+            if x['side']==side_filter and x['contractId']==base_filter and x['expiryDate']-now_time<=date_filter*86400000 and x['minQty']==minQty_filter:
+                return x
+        symbols_array=list(filter(filter_my, request_result['data']['optionSymbols']))
+        return symbols_array
+
+    @staticmethod
+    def get_proper_symbol(data_array,strike_price):
+        proper_symbol=None
+        min_delta=99999999999
+        for i in data_array:
+            if abs(float(i['strikePrice'])-strike_price)<min_delta:
+                min_delta=float(i['strikePrice'])-strike_price
+                proper_symbol=i['symbol']
+        return proper_symbol
 
     @staticmethod
     def mark_price(symbol):
+        # return BinanceInterface.client.market.get_mark(symbol = symbol)
         return BinanceInterface.client.market.get_mark(symbol)[0]['markPrice']
 
 
@@ -140,12 +163,16 @@ class OrderClient(object):
         return OrderClient.client.account_info()
 
     @staticmethod
-    def get_exchange_info():
-        return OrderClient.client.exchange_info()
+    def get_exchange_info(base_filter=2,side_filter='CALL',date_filter=1,minQty_filter='0.01'):
+        return OrderClient.client.exchange_info(base_filter,side_filter,date_filter,minQty_filter)
 
     @staticmethod
-    def get_account_margin():
-        return OrderClient.client.account_margin()
+    def get_account_margin(asset='USDT'):
+        return OrderClient.client.account_margin(asset)
+
+    @staticmethod
+    def get_proper_symbol(data_array,strike_price):
+        return OrderClient.client.get_proper_symbol(data_array,strike_price)
 
     @staticmethod
     def get_mark_price(symbol):

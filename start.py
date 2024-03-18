@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import time
 import traceback
 
@@ -37,20 +38,19 @@ def route_open_order():
     try:
         params = json.loads(request.data)
         if params['target'] == 'OPEN':
-            symbol = params['symbol']
             side = params['side']
             price = params['price']
             price_other_side = params['price_other_side']
+            symbol=OrderClient.get_proper_symbol(OrderClient.get_exchange_info(base_filter = 2,side_filter = 'CALL' if side=='BUY' else 'SELL',date_filter = 1),price)
+            mark_price=OrderClient.get_mark_price(symbol)
             # todo 确认quantity
-            quantity = 0.01
-            # quantity=math.floor(((OrderClient.get_account_info())*setting_dict[
-            # 'order_rate']/OrderClient.get_mark_price(
-            # symbol))*100)/100
-            OrderClient.open_order(symbol, side, 'LIMIT', quantity, price)
+            # quantity = 0.01
+            quantity=math.floor(((OrderClient.get_account_margin()*setting_dict['order_rate'])/mark_price)*100)/100
+            OrderClient.open_order(symbol, side, 'BBO', quantity,price_input = price)
             OrderClient.open_order(
                 symbol,
                 'BUY' if side == 'SELL' else 'SELL',
-                'LIMIT',
+                'BBO',
                 quantity,
                 price_other_side)
         if params['target'] == 'CLOSE':
@@ -79,7 +79,7 @@ def route_get_account():
 @app.get('/exchange_info')
 def route_get_exchange_info():
     try:
-        return OrderClient.get_exchange_info()
+        return OrderClient.get_proper_symbol(OrderClient.get_exchange_info(),64000)
     except Exception as e:
         print(str(traceback.format_exc()))
         log_to_txt(1, str(traceback.format_exc()))
@@ -90,12 +90,16 @@ def route_mark_price():
     try:
         return OrderClient.get_mark_price(request.args.get('symbol'))
     except Exception as e:
+        print(str(traceback.format_exc()))
         log_to_txt(1, str(traceback.format_exc()))
 
 
-@app.route('/nice')
+@app.route('/margin')
 def route_nice():
-    return 'Nice to meet you!'
+    try:
+        return OrderClient.get_account_margin()
+    except Exception as e:
+        print(str(traceback.format_exc()))
 
 
 if __name__ == '__main__':
