@@ -1,3 +1,3 @@
 workers = 1
 worker_class = "sync"
-bind = "127.0.0.1:8012"
+bind = "0.0.0.0:8012"
