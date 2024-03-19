@@ -1,6 +1,5 @@
 import json
 import logging
-import math
 import time
 import traceback
 
@@ -8,7 +7,7 @@ from flask import Flask, request
 
 from trader import OrderClient
 
-# todo 确认账户开通,确认tv参数发送正确
+# todo 确认tv参数发送正确
 # 打开配置json文件
 with open("settings.json", 'r', encoding = 'UTF-8') as f:
     setting_dict = json.load(f)
@@ -37,34 +36,31 @@ print('running server from now on ' + time.strftime("%Y-%m-%d %H:%M:%S",
 def route_open_order():
     try:
         params = json.loads(request.data)
+        msg = 'success'
         if params['target'] == 'OPEN':
             side = params['side']
-            price = params['price']
-            price_other_side = params['price_other_side']
-            symbol=OrderClient.get_proper_symbol(OrderClient.get_exchange_info(base_filter = 2,side_filter = 'CALL' if side=='BUY' else 'SELL',date_filter = 1),price)
-            mark_price=OrderClient.get_mark_price(symbol)
-            # todo 确认quantity
-            # quantity = 0.01
-            quantity=math.floor(((OrderClient.get_account_margin()*setting_dict['order_rate'])/mark_price)*100)/100
-            OrderClient.open_order(symbol, side, 'BBO', quantity,price_input = price)
-            OrderClient.open_order(
-                symbol,
-                'BUY' if side == 'SELL' else 'SELL',
-                'BBO',
-                quantity,
-                price_other_side)
-        if params['target'] == 'CLOSE':
-            symbol = params['symbol']
+            price = params['strike_price']
+            price_other_side = params['strike_price_other_side']
+            final_param = OrderClient.all_params_open({'side': side, 'price': price})
+            res1 = OrderClient.open_order(**final_param)
+            final_param_other = OrderClient.all_params_open({
+                'side': 'BUY' if side == 'SELL' else 'SELL',
+                'price': price_other_side
+            })
+            res2 = OrderClient.open_order(**final_param_other)
+            msg = str(res1) + str(res2)
+        elif params['target'] == 'CLOSE':
             side = params['side']
-            direction = 'long' if side == 'SELL' else 'short'
-            OrderClient.close_order(
-                symbol,
-                OrderClient.pyramid_dict[direction]['orderId'][-1])
+            order_id = params['order_id'] if 'order_id' in params else None
+            res3 = OrderClient.close_order(side, order_id)
+            msg = str(res3)
+        return msg
     except Exception as e:
+        print(str(traceback.format_exc()))
         log_to_txt(1, str(traceback.format_exc()))
+        return str(traceback.format_exc())
     finally:
         log_to_txt(0, str(OrderClient.pyramid_dict))
-        return 'success'
 
 
 @app.get('/account_info')
@@ -79,7 +75,7 @@ def route_get_account():
 @app.get('/exchange_info')
 def route_get_exchange_info():
     try:
-        return OrderClient.get_proper_symbol(OrderClient.get_exchange_info(),64000)
+        return OrderClient.get_proper_symbol(OrderClient.get_exchange_info(), 64000)
     except Exception as e:
         print(str(traceback.format_exc()))
         log_to_txt(1, str(traceback.format_exc()))
@@ -94,10 +90,10 @@ def route_mark_price():
         log_to_txt(1, str(traceback.format_exc()))
 
 
-@app.route('/margin')
-def route_nice():
+@app.get('/margin')
+def route_margin():
     try:
-        return OrderClient.get_account_margin()
+        return str(OrderClient.get_account_available())
     except Exception as e:
         print(str(traceback.format_exc()))
 
