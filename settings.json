@@ -1,8 +1,13 @@
 {
   "binance_key": "nqePpuEHj8CjivEBOA8ZLh5RQFQzCp7k8lmMo9ayqtgdmB6iStgEI6i6OrOITB6T",
   "binance_secret": "zvMwJeq1j84lHpBnxO1eV6c2tIkwYPyIsQP8nR1cnMkoyjBPN6QYknczQ0ADn1Is",
+  "okx_key": "d7c85525-f600-4d83-bd1b-37203c7132b8",
+  "okx_secret": "83C05AE092944F0628753099659DF38F",
+  "okx_passphrase": "@Hhjtc314",
+  "okx_flag": "0",
   "most_freq": 10,
   "pyramid": 1,
-  "broker": "binance",
-  "order_rate": 0.1
+  "broker": "okx",
+  "order_rate": 0.1,
+  "okx_flag_value": "实盘是0,模拟盘是1"
 }

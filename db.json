@@ -1,0 +1,43 @@
+{
+  "_default": {
+    "1": {
+      "pyramid": {
+        "long": {
+          "orders": [],
+          "status": 0,
+          "freq": 4
+        },
+        "short": {
+          "orders": [
+            {
+              "orderId": "111111111",
+              "symbol": "BTC-USD",
+              "quantity": 0.02,
+              "date": 22
+            },
+            {
+              "orderId": "111111111",
+              "symbol": "BTC-USD",
+              "quantity": 0.02,
+              "date": 22
+            },
+            {
+              "orderId": "111111111",
+              "symbol": "BTC-USD",
+              "quantity": 0.02,
+              "date": 22
+            },
+            {
+              "orderId": "111111111",
+              "symbol": "BTC-USD",
+              "quantity": 0.02,
+              "date": 22
+            }
+          ],
+          "status": 4,
+          "freq": 4
+        }
+      }
+    }
+  }
+}
